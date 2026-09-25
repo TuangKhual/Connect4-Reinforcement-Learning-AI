@@ -19,11 +19,12 @@ class connect4Env(gym.Env):
 
     def findWinningMove(self, game, player):
         won = False
-        currentTurn = game.playerTurn  # saves the actual turn so you can check if the opponent has a winning move too
-        game.playerTurn = player
         for col in range(7):
             if game.board[0][col] != 0:  # move if full
-                continue
+                continue            
+            
+            currentTurn = game.playerTurn  # saves the actual turn so you can check if the opponent has a winning move too
+            game.playerTurn = player
             game.drop(col)
             if (game.winCons() == player): 
                 won = True

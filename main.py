@@ -8,13 +8,15 @@ import random
 
 model = MaskablePPO.load("connect4_masked_gen10.zip") # loads whichever model you want
 
-def findWinningMove(game, player):
+def findWinningMove(self, game, player):
     won = False
-    currentTurn = game.playerTurn  # saves the actual turn so you can check if the opponent has a winning move too
-    game.playerTurn = player
-    for col in range(7):
+    for col in range(7):    
         if game.board[0][col] != 0:  # move if full
             continue
+
+        currentTurn = game.playerTurn  # saves the actual turn so you can check if the opponent has a winning move too
+        game.playerTurn = player
+
         game.drop(col)
         if (game.winCons() == player): 
             won = True
