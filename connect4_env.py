@@ -111,6 +111,21 @@ class connect4Env(gym.Env):
             else:
                 self.game.drop(random.choice(col)) #drops in that random col
         else:
+            aiPiece = sum(row.count(self.agentTurn) for row in self.game.board) # added the same for the enemy ai
+            if aiPiece == 0 and self.game.board[0][3] == 0:
+                self.game.drop(3)
+                return
+
+            winningMove = self.findWinningMove(self.game, self.agentTurn)
+            if winningMove != None:
+                self.game.drop(winningMove)
+                return
+
+            blockWinningMove = self.findWinningMove(self.game, -self.agentTurn)
+            if blockWinningMove != None:
+                self.game.drop(blockWinningMove)
+                return
+        
             obs = np.array(self.game.board, dtype = np.float32) * -self.agentTurn #flips board view in case the ai is player as player 2
             action, _ = self.enemy.predict(obs, action_masks = self.action_masks(), deterministic = False)
             if self.game.board[0][int(action)] != 0:
