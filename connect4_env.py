@@ -17,6 +17,26 @@ class connect4Env(gym.Env):
     def action_masks(self):
         return np.array([self.game.board[0][c] == 0 for c in range(7)])
 
+    def findWinningMove(self, game, player):
+        won = False
+        currentTurn = game.playerTurn  # saves the actual turn so you can check if the opponent has a winning move too
+        game.playerTurn = player
+        for col in range(7):
+            if game.board[0][col] != 0:  # move if full
+                continue
+            game.drop(col)
+            if (game.winCons() == player): 
+                won = True
+
+            for row in range(6):   # delete the move that was just made
+                if game.board[row][col] != 0:
+                    game.board[row][col] = 0
+                    break
+            game.playerTurn = currentTurn
+            if won:
+                return col
+        return None
+
     def setEnemy(self, model):
         model.save("tempEnemy")    # saves enemy so it can be loaded
         self.enemy = MaskablePPO.load("tempEnemy", device="cpu") 
@@ -36,9 +56,19 @@ class connect4Env(gym.Env):
     
     def step(self, action):
         reward = 0.0
-        self.game.drop(action)
-        if (self.first_move and action == 3):
-            reward += 0.05
+        winningMove = self.findWinningMove(self.game, self.agentTurn) # if finds the winning move
+        if winningMove != None:
+            self.game.drop(winningMove)
+            return self.getObsSpace(), 1.0, True, False, {} # ends the game
+
+        blockWinningMove = self.findWinningMove(self.game, -self.agentTurn) #blocks a winning move
+        if blockWinningMove != None:
+            self.game.drop(blockWinningMove)
+            reward += 0.10 # gets alittle reward
+        else:
+            self.game.drop(action)
+            if (self.first_move and action == 3):
+                reward += 0.05
 
         winner = self.game.winCons() # checks for win
 

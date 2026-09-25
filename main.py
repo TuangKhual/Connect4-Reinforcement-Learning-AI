@@ -8,7 +8,44 @@ import random
 
 model = MaskablePPO.load("connect4_masked_gen10.zip") # loads whichever model you want
 
+def findWinningMove(game, player):
+    won = False
+    currentTurn = game.playerTurn  # saves the actual turn so you can check if the opponent has a winning move too
+    game.playerTurn = player
+    for col in range(7):
+        if game.board[0][col] != 0:  # move if full
+            continue
+        game.drop(col)
+        if (game.winCons() == player): 
+            won = True
+
+        for row in range(6):   # delete the move that was just made
+            if game.board[row][col] != 0:
+                game.board[row][col] = 0
+                break
+        game.playerTurn = currentTurn
+        if won:
+            return col
+    return None
+        
+
+
 def aiMove(game, model, turn):
+    aiPiece = sum(row.count(turn) for row in game.board) # checks for it's first move
+    if aiPiece == 0 and game.board[0][3] == 0: # goes middle for first move
+        game.drop(3)
+        return
+
+    winningMove = findWinningMove(game, turn) #if there is a winning move
+    if winningMove != None:
+        game.drop(winningMove)
+        return
+
+    blockWinningMove = findWinningMove(game, -turn) # if there is a move that lets the opponent win
+    if blockWinningMove != None:
+        game.drop(blockWinningMove)
+        return
+    
     obs = np.array(game.board, dtype = np.float32) * turn # if it's player 1 or 2 it changes the board accordingly
     action, _ = model.predict(obs, deterministic = True) # picks the best move
     if game.board[0][action] != 0: # if the column is full gets the first 
@@ -26,7 +63,6 @@ def main():
 
     running = True
     gameFinish = False
-    firstMove = False
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT: 
