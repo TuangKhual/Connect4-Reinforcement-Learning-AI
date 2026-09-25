@@ -6,7 +6,7 @@ from sb3_contrib import MaskablePPO
 import numpy as np
 import random
 
-model = PPO.load("connect4_ai_largeV4") # loads whichever model you want
+model = MaskablePPO.load("connect4_masked_gen10.zip") # loads whichever model you want
 
 def aiMove(game, model, turn):
     obs = np.array(game.board, dtype = np.float32) * turn # if it's player 1 or 2 it changes the board accordingly
@@ -19,7 +19,6 @@ def aiMove(game, model, turn):
         action = random.choice(col) # if the col is full just take a random col
     game.drop(int(action))
 
-
 def main():
     pygame.init()
     game = connect4()
@@ -27,6 +26,7 @@ def main():
 
     running = True
     gameFinish = False
+    firstMove = False
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT: 

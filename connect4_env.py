@@ -3,6 +3,7 @@ from stable_baselines3 import PPO
 import numpy as np
 from gymnasium import spaces
 from connect4 import connect4
+from sb3_contrib import MaskablePPO
 import random
 
 class connect4Env(gym.Env):
@@ -11,10 +12,14 @@ class connect4Env(gym.Env):
         self.enemy = None
         self.observation_space = spaces.Box(low = -1, high = 1, shape=(6,7), dtype = np.float32) # the connect4 square
         self.action_space = spaces.Discrete(7) # can only do 0 to 6 aka 7 columns
+        self.first_move = True
+
+    def action_masks(self):
+        return np.array([self.game.board[0][c] == 0 for c in range(7)])
 
     def setEnemy(self, model):
         model.save("tempEnemy")    # saves enemy so it can be loaded
-        self.enemy = PPO.load("tempEnemy", device="cpu") 
+        self.enemy = MaskablePPO.load("tempEnemy", device="cpu") 
 
     def reset(self, seed=None, options=None):
         super().reset(seed = seed)
@@ -24,13 +29,16 @@ class connect4Env(gym.Env):
 
         if self.agentTurn == -1: # if the agent gets player 2 has the enemy move first
             self.enemyMove() 
+            self.first_move = False
+        else:
+            self.first_move = True
         return self.getObsSpace(), {}
     
     def step(self, action):
-        if self.game.board[0][action] != 0: #invalid move of trying to put it at full
-            return self.getObsSpace(), -1.0, True, False, {} # ends the game and punishes this
-        
+        reward = 0.0
         self.game.drop(action)
+        if (self.first_move and action == 3):
+            reward += 0.05
 
         winner = self.game.winCons() # checks for win
 
@@ -58,7 +66,7 @@ class connect4Env(gym.Env):
             return self.getObsSpace(), 0.0, True, False, {}
             
         return self.getObsSpace(), 0.0, False, False, {}
-    
+
     def enemyMove(self):
         col = []
         for i in range(7):
@@ -67,10 +75,14 @@ class connect4Env(gym.Env):
         if not col:
             return
         if self.enemy is None: # the first time training
-            self.game.drop(random.choice(col)) #drops in that random col
+            if (self.first_move):
+                self.game.drop(3) #drops in middle because that's the best first move
+                self.first_move = False
+            else:
+                self.game.drop(random.choice(col)) #drops in that random col
         else:
             obs = np.array(self.game.board, dtype = np.float32) * -self.agentTurn #flips board view in case the ai is player as player 2
-            action, _ = self.enemy.predict(obs, deterministic = False)
+            action, _ = self.enemy.predict(obs, action_masks = self.action_masks(), deterministic = False)
             if self.game.board[0][int(action)] != 0:
                 col = [i for i in range(7) if self.game.board[0][i] == 0]
                 if not col:
