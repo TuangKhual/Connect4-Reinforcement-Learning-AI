@@ -8,7 +8,7 @@ import random
 
 model = MaskablePPO.load("connect4_masked_gen10.zip") # loads whichever model you want
 
-def findWinningMove(self, game, player):
+def findWinningMove(game, player):
     won = False
     for col in range(7):    
         if game.board[0][col] != 0:  # move if full
@@ -38,7 +38,7 @@ def aiMove(game, model, turn):
         game.drop(3)
         return
 
-    winningMove = findWinningMove(game, turn) #if there is a winning move
+    winningMove = findWinningMove(game, turn, ) #if there is a winning move
     if winningMove != None:
         game.drop(winningMove)
         return
