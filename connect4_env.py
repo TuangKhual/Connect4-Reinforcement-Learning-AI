@@ -10,7 +10,7 @@ class connect4Env(gym.Env):
     def __init__(self):
         self.game = connect4()
         self.enemy = None
-        self.observation_space = spaces.Box(low = -1, high = 1, shape=(6,7), dtype = np.float32) # the connect4 square
+        self.observation_space = spaces.Box(low = -1, high = 1, shape=(1,6,7), dtype = np.float32) # the connect4 square (channels, height, width)
         self.action_space = spaces.Discrete(7) # can only do 0 to 6 aka 7 columns
         self.first_move = True
 
@@ -127,7 +127,7 @@ class connect4Env(gym.Env):
                 self.game.drop(blockWinningMove)
                 return
         
-            obs = np.array(self.game.board, dtype = np.float32) * -self.agentTurn #flips board view in case the ai is player as player 2
+            obs = (np.array(self.game.board, dtype = np.float32) * -self.agentTurn).reshape(1, 6, 7) #flips board view in case the ai is player as player 2
             action, _ = self.enemy.predict(obs, action_masks = self.action_masks(), deterministic = False)
             if self.game.board[0][int(action)] != 0:
                 col = [i for i in range(7) if self.game.board[0][i] == 0]
@@ -138,5 +138,5 @@ class connect4Env(gym.Env):
 
     def getObsSpace(self):
         board = np.array(self.game.board, dtype=np.float32) * self.agentTurn
-        return board
+        return board.reshape(1, 6, 7)
 
