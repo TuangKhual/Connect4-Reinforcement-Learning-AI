@@ -4,14 +4,19 @@ import numpy as np
 from gymnasium import spaces
 from connect4 import connect4
 from sb3_contrib import MaskablePPO
+from minimaxPy import minimaxAi
 import random
 
 class connect4Env(gym.Env):
-    def __init__(self):
+    def __init__(self, poolSize = 10, minimaxDepth = 5, minimaxRatio = 0.2):
+        self.enemyPool = []
         self.game = connect4()
         self.enemy = None
         self.observation_space = spaces.Box(low = -1, high = 1, shape=(1,6,7), dtype = np.float32) # the connect4 square (channels, height, width)
-        self.action_space = spaces.Discrete(7) # can only do 0 to 6 aka 7 columns
+        self.action_space = spaces.Discrete(7) 
+        self.minimaxAi = minimaxAi(depth = minimaxDepth)
+        self.minimaxRatio = minimaxRatio
+        self.poolSize = 10
         self.first_move = True
 
     def action_masks(self):
@@ -38,13 +43,18 @@ class connect4Env(gym.Env):
                 return col
         return None
 
-    def setEnemy(self, model):
-        model.save("tempEnemy")    # saves enemy so it can be loaded
-        self.enemy = MaskablePPO.load("tempEnemy", device="cpu") 
+    def chooseEnemy(self):
+        if not self.enemyPool:
+            self.enemy = None
+        elif random.random() < self.minimaxRatio:
+            self.enemy = "minimax"
+        else:
+            self.enemy = random.choice(self.enemyPool)
 
     def reset(self, seed=None, options=None):
         super().reset(seed = seed)
         self.game.restart()
+        self.chooseEnemy()
 
         self.agentTurn = random.choice([-1, 1]) # I want the ai to train as both player 1 and player 2
 
@@ -58,45 +68,40 @@ class connect4Env(gym.Env):
     def step(self, action):
         reward = 0.0
         winningMove = self.findWinningMove(self.game, self.agentTurn) # if finds the winning move
-        if winningMove != None:
-            self.game.drop(winningMove)
-            return self.getObsSpace(), 1.0, True, False, {} # ends the game
-
         blockWinningMove = self.findWinningMove(self.game, -self.agentTurn) #blocks a winning move
-        if blockWinningMove != None:
-            self.game.drop(blockWinningMove)
-            reward += 0.10 # gets alittle reward
-        else:
-            self.game.drop(action)
-            if (self.first_move and action == 3):
-                reward += 0.05
+        if winningMove != None:
+            if action != winningMove:
+                reward -= 0.10
+        elif blockWinningMove != None:
+            if action == blockWinningMove:
+                reward += 0.10
+
+        self.game.drop(action)
+        if (self.first_move and action == 3):
+            reward += 0.05
 
         winner = self.game.winCons() # checks for win
 
         if winner != 0:
             if winner == self.agentTurn: #checks to see it wins
-                reward = 1.0
-            else:
-                reward = -1.0
+                reward += 1.0
             return self.getObsSpace(), reward, True, False, {}
 
         if all(self.game.board[0][i] != 0 for i in range(7)):
-            return self.getObsSpace(), 0.0, True, False, {}
+            return self.getObsSpace(), reward, True, False, {}
 
         self.enemyMove()
         winner = self.game.winCons()
 
         if winner != 0:
-            if winner == self.agentTurn: #checks to see it wins
-                reward = 1.0
-            else:
-                reward = -1.0
+            if winner != self.agentTurn: #checks to see it wins
+                reward -= 1.0
             return self.getObsSpace(), reward, True, False, {}
         
         if all(self.game.board[0][i] != 0 for i in range(7)): #checks to see if the board is full then its a tie
-            return self.getObsSpace(), 0.0, True, False, {}
+            return self.getObsSpace(), reward, True, False, {}
             
-        return self.getObsSpace(), 0.0, False, False, {}
+        return self.getObsSpace(), reward, False, False, {}
 
     def enemyMove(self):
         col = []
@@ -105,7 +110,10 @@ class connect4Env(gym.Env):
                 col.append(i)
         if not col:
             return
-        if self.enemy is None: # the first time training
+        if self.enemy == "minimax":
+            action = self.minimaxAi.pyAction(self.game.board, -self.agentTurn)
+            self.game.drop(action)
+        elif self.enemy is None: # the first time training
             if (self.first_move):
                 self.game.drop(3) #drops in middle because that's the best first move
                 self.first_move = False
