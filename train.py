@@ -7,54 +7,87 @@ import random
 import gymnasium as gym
 import torch
 import torch.nn as nn
+import os
+
 
 class Connect4CNN(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Box, features_dim: int = 128):
+    def __init__(self, observation_space: gym.spaces.Box, features_dim: int = 256):
         super().__init__(observation_space, features_dim)
-        self.cnn = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size = 3, padding = 1),
+        self.initial = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size = 3, padding = 1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size = 3, padding = 1),
+        )
+        self.res = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size = 3, padding = 1),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size = 3, padding = 1),
+        )
+        self.head = nn.Sequential(
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(64 * 6 * 7, features_dim),
             nn.ReLU(),
         )
 
-    def forward(self, observations: torch.Tensor) -> torch.Tensor:
-        return self.cnn(observations)
+    def forward(self, x):
+        x = self.initial(x)
+        x = x + self.res(x)
+        return self.head(x)
 
-env = connect4Env(poolSize = 10, minimaxDepth = 5, minimaxRatio = 0.2)
+env = connect4Env(poolSize = 10, minimaxDepths = [1], minimaxRatio = 0.1)
 check_env(env)
 
 policy_kwargs = dict(
     features_extractor_class=Connect4CNN,
-    features_extractor_kwargs = dict(features_dim = 128),
+    features_extractor_kwargs = dict(features_dim = 256),
 )
 
-model = MaskablePPO("CnnPolicy", env, verbose = 1, learning_rate = 1e-4, n_steps = 4096, batch_size = 512, ent_coef = 0.05, device = "cpu", policy_kwargs = policy_kwargs)
+model = MaskablePPO("CnnPolicy", env, verbose = 1, learning_rate = 1e-4, n_steps = 4096, batch_size = 512, ent_coef = 0.01, target_kl = 0.03, vf_coef = 0.5, gamma = 0.99, n_epochs = 10, device = "cpu", policy_kwargs = policy_kwargs)
 
-updateInterval = 150_000
-totalSteps = 7_500_000 
+updateInterval = 100_000
+totalSteps = 10_000_000 
 
 steps = 0
 generation = 0
-
-while steps < totalSteps:
-    if steps >= 2_000_000:
-        env.minimaxRatio = 0.4
-    model.learn(total_timesteps = updateInterval, reset_num_timesteps = False)
-    steps += updateInterval
-    generation += 1
-    model.save(f"connect4_masked_gen_ONE_{generation}") #Saves the generation
-    env.enemyPool.append(MaskablePPO.load(f"connect4_masked_gen_ONE_{generation}"))
-    print(f"Generation {generation} complete ({steps}/{totalSteps} steps)")
-    if len(env.enemyPool) > env.poolSize: #removes when the pool is too big
-        env.enemyPool.pop(0)
+lastestPool = []
+landmarkPool = []
 
 
-model.save("connect4_masked_ai_largeV10")
-print("Training complete!")
+LASTEST_SIZE = 10
+LANDMARK_INTERVAL = 10
+try:
+    while steps < totalSteps:
+        ratio = min(0.5, 0.1 + steps / 10_000_000) 
+        if steps < 2_000_000:
+            env.minimaxDepths = [1]
+        elif steps < 4_000_000:
+            env.minimaxDepths = [1, 2]
+        elif steps < 6_000_000:
+            env.minimaxDepths = [2, 3]
+        elif steps < 8_000_000:
+            env.minimaxDepths = [3, 4]
+        else:
+            env.minimaxDepths = [4, 5]
+        
+        model.learn(total_timesteps = updateInterval, reset_num_timesteps = False)
+        steps += updateInterval
+        generation += 1
+        model.save(f"connect4_masked_gen_ONE_{generation}") 
+        loadedModel = MaskablePPO.load(f"connect4_masked_gen_ONE_{generation}")
 
-## import os
-## os.system("shutdown -h +1")   # needs root; cancel with: shutdown -c
+        lastestPool.append(loadedModel)
+        if len(lastestPool) > LASTEST_SIZE:
+            lastestPool.pop(0)
+
+        if generation % LANDMARK_INTERVAL == 0:
+            landmarkPool.append(loadedModel)
+
+        
+        env.enemyPool = lastestPool + landmarkPool
+        print(f"Generation {generation} complete ({steps}/{totalSteps} steps)")
+
+    model.save("connect4_masked_ai_large_Compare")
+    print("Training complete!")
+
+finally:
+    os.system("shutdown -h +1")   # needs root; cancel with: shutdown -c
