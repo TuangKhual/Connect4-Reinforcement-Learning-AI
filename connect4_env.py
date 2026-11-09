@@ -8,16 +8,27 @@ from minimaxPy import minimaxAi
 import random
 
 class connect4Env(gym.Env):
-    def __init__(self, poolSize = 10, minimaxDepth = 5, minimaxRatio = 0.2):
+    def __init__(self, poolSize = 10, minimaxDepths = None, minimaxRatio = 0.2):
         self.enemyPool = []
         self.game = connect4()
         self.enemy = None
         self.observation_space = spaces.Box(low = -1, high = 1, shape=(1,6,7), dtype = np.float32) # the connect4 square (channels, height, width)
         self.action_space = spaces.Discrete(7) 
-        self.minimaxAi = minimaxAi(depth = minimaxDepth)
+        self._minimaxAis = {}
+        self.minimaxDepths = minimaxDepths or [1]
         self.minimaxRatio = minimaxRatio
-        self.poolSize = 10
-        self.first_move = True
+        self.poolSize = poolSize
+
+    @property
+    def minimaxDepths(self):
+        return self._minimaxDepths
+
+    @minimaxDepths.setter
+    def minimaxDepths(self, depths):
+        self._minimaxDepths = depths
+        for dep in depths:
+            if dep not in self._minimaxAis:
+                self._minimaxAis[dep] = minimaxAi(dep)
 
     def action_masks(self):
         return np.array([self.game.board[0][c] == 0 for c in range(7)])
@@ -60,25 +71,12 @@ class connect4Env(gym.Env):
 
         if self.agentTurn == -1: # if the agent gets player 2 has the enemy move first
             self.enemyMove() 
-            self.first_move = False
-        else:
-            self.first_move = True
+
         return self.getObsSpace(), {}
     
     def step(self, action):
         reward = 0.0
-        winningMove = self.findWinningMove(self.game, self.agentTurn) # if finds the winning move
-        blockWinningMove = self.findWinningMove(self.game, -self.agentTurn) #blocks a winning move
-        if winningMove != None:
-            if action != winningMove:
-                reward -= 0.10
-        elif blockWinningMove != None:
-            if action == blockWinningMove:
-                reward += 0.10
-
         self.game.drop(action)
-        if (self.first_move and action == 3):
-            reward += 0.05
 
         winner = self.game.winCons() # checks for win
 
@@ -111,26 +109,23 @@ class connect4Env(gym.Env):
         if not col:
             return
         if self.enemy == "minimax":
-            action = self.minimaxAi.pyAction(self.game.board, -self.agentTurn)
+            depth = random.choice(self.minimaxDepths)
+            action = self._minimaxAis[depth].pyAction(self.game.board, -self.agentTurn)
             self.game.drop(action)
         elif self.enemy is None: # the first time training
-            if (self.first_move):
-                self.game.drop(3) #drops in middle because that's the best first move
-                self.first_move = False
-            else:
-                self.game.drop(random.choice(col)) #drops in that random col
+            self.game.drop(random.choice(col)) #drops in that random col
         else:
             aiPiece = sum(row.count(self.agentTurn) for row in self.game.board) # added the same for the enemy ai
             if aiPiece == 0 and self.game.board[0][3] == 0:
                 self.game.drop(3)
                 return
 
-            winningMove = self.findWinningMove(self.game, self.agentTurn)
+            winningMove = self.findWinningMove(self.game, -self.agentTurn)
             if winningMove != None:
                 self.game.drop(winningMove)
                 return
 
-            blockWinningMove = self.findWinningMove(self.game, -self.agentTurn)
+            blockWinningMove = self.findWinningMove(self.game, self.agentTurn)
             if blockWinningMove != None:
                 self.game.drop(blockWinningMove)
                 return
