@@ -10,10 +10,13 @@ I chose PPO as the reinforcement learning algorithm because it's what most peopl
 
 The AI is trained in generations. After each set training interval, the generation is saved and is added to the enemy pool, so future generations can train off the previous. This ends up creating an agent that gets stronger generation after generation.
 
+Currently the strong agent attached can beat a minimax engine with a depth of 4. It was trained over 10 million steps and 100k per generation.
+
 Requirements:
 Gymnasium
 Stable-Baselines3
 SB3-Contrib / Maskable PPO
+torch
 Numpy
 Pygame
 
